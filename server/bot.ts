@@ -2,11 +2,11 @@ import TelegramBot from "node-telegram-bot-api";
 import fs from "fs";
 import path from "path";
 import { db } from "./db";
-import { conversions, membershipPackages, userMemberships, paymentRecords } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { conversions } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 interface UserState {
-  mode?: "TXT_TO_VCF" | "ADMIN_CV" | "VIP_PURCHASE";
+  mode?: "TXT_TO_VCF" | "ADMIN_CV";
   step?: number;
   fileNumbers?: string[];
   numberCount?: number;
@@ -18,29 +18,18 @@ interface UserState {
   adminName?: string;
   navyNumbers?: string[];
   navyName?: string;
-  selectedPackageId?: number;
 }
 
 const userStates = new Map<number, UserState>();
 const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID?.toString() || "";
-const PREMIUM_USERS = process.env.PREMIUM_USERS?.split(",").map(id => id.trim()) || [];
 
 console.log("Admin ID configured:", ADMIN_ID);
-console.log("Premium users configured:", PREMIUM_USERS.length, "users");
 
 // Format phone number with + prefix for VCF
 function formatPhoneNumber(number: string): string {
   if (!number) return number;
   const digits = number.replace(/\D/g, "");
   return digits.startsWith("+") || number.startsWith("+") ? number : `+${digits}`;
-}
-
-// Check if user is in premium whitelist
-function isPremiumUser(chatId: number): boolean {
-  const userId = chatId.toString();
-  const isPremium = PREMIUM_USERS.includes(userId) || userId === ADMIN_ID;
-  console.log(`Checking premium status for ${userId}: ${isPremium}`);
-  return isPremium;
 }
 
 export function setupBot() {
@@ -66,14 +55,13 @@ export function setupBot() {
     // Start command - show menu with photo and buttons
     if (text === "/start") {
       try {
-        const packages = await db.select().from(membershipPackages);
-        const priceList = packages.map(p => `${p.name}: Rp${p.price.toLocaleString("id-ID")}`).join(" | ");
-        
         const welcomeMessage = `🎉 Bot Konverter VCF Pro
 
-📄 CV TXT to VCF - GRATIS DARI FETRUS MEILANO ILHAMSYAH
-👥 CV Kontak Admin - PREMIUM
-💎 Premium Membership ${priceList}
+📄 CV TXT to VCF - GRATIS
+👥 CV Kontak Admin - GRATIS
+🆓 Semua Fitur Gratis!
+
+Developer: FETRUS MEILANO ILHAMSYAH
 
 Pilih fitur di bawah:`;
 
@@ -82,9 +70,6 @@ Pilih fitur di bawah:`;
             [
               { text: "📄 CV TXT to VCF", callback_data: "btn_txt_to_vcf" },
               { text: "👥 CV Kontak Admin", callback_data: "btn_admin" }
-            ],
-            [
-              { text: "💎 Premium Membership", callback_data: "btn_vip" }
             ],
             [
               { text: "🔄 Reset Data", callback_data: "btn_reset" }
@@ -127,131 +112,7 @@ Pilih fitur di bawah:`;
       return;
     }
 
-    // VIP command - show membership packages
-    if (text === "/vip") {
-      try {
-        const packages = await db.select().from(membershipPackages);
-        const isPremium = isPremiumUser(chatId);
-        
-        let message = isPremium ? "✅ Anda sudah Premium!\n\n" : "💎 PAKET PREMIUM MEMBERSHIP\n\n";
-        
-        packages.forEach((pkg) => {
-          message += `📦 ${pkg.name}\n💰 Rp${pkg.price.toLocaleString("id-ID")}\n⏱️ ${pkg.days} hari akses\n\n`;
-        });
-        
-        message += "💳 Cara Pembayaran:\n1. Pilih paket\n2. Transfer ke rekening yang diberikan\n3. Kirim bukti transfer\n4. Admin akan verifikasi\n\nKetik /paket untuk memilih paket";
-        
-        await bot.sendMessage(chatId, message);
-      } catch (err) {
-        console.error("Error showing VIP packages:", err);
-        await bot.sendMessage(chatId, "❌ Gagal memuat paket Premium");
-      }
-      return;
-    }
-
-    // Paket selection
-    if (text === "/paket") {
-      try {
-        const packages = await db.select().from(membershipPackages);
-        const buttons = packages.map((pkg) => [
-          { text: `${pkg.name} - Rp${pkg.price.toLocaleString("id-ID")}`, callback_data: `vip_${pkg.id}` }
-        ]);
-        
-        await bot.sendMessage(chatId, "Pilih paket Premium:", {
-          reply_markup: { inline_keyboard: buttons }
-        });
-      } catch (err) {
-        console.error("Error loading packages:", err);
-        await bot.sendMessage(chatId, "❌ Gagal memuat paket");
-      }
-      return;
-    }
-
-    // Admin verify command
-    if (text?.startsWith("/verify ")) {
-      const userIdStr = chatId.toString();
-      console.log(`Admin check: userId=${userIdStr}, adminId=${ADMIN_ID}, match=${userIdStr === ADMIN_ID}`);
-      
-      if (userIdStr !== ADMIN_ID) {
-        await bot.sendMessage(chatId, `❌ Hanya admin yang bisa menggunakan command ini.\n\nID Anda: ${userIdStr}`);
-        return;
-      }
-      
-      const parts = text.trim().split(" ");
-      console.log("Verify command parts:", parts);
-      
-      if (parts.length < 3) {
-        await bot.sendMessage(chatId, "Format: /verify <userId> <packageId>\n\nContoh: /verify 987654321 1");
-        return;
-      }
-      
-      const userId = parseInt(parts[1], 10);
-      const packageId = parseInt(parts[2], 10);
-      
-      console.log(`Parsing: userId=${userId}, packageId=${packageId}`);
-      
-      if (isNaN(userId) || isNaN(packageId)) {
-        await bot.sendMessage(chatId, `❌ Error: userId atau packageId tidak valid!\n\nAnda kirim: /verify ${parts[1]} ${parts[2]}\n\nMohon gunakan angka.\n\nFormat: /verify <userId> <packageId>`);
-        return;
-      }
-      
-      try {
-        const pkg = await db.query.membershipPackages.findFirst({
-          where: eq(membershipPackages.id, packageId)
-        });
-        
-        if (!pkg) {
-          await bot.sendMessage(chatId, `❌ Paket ID ${packageId} tidak ditemukan.\n\nPackage IDs yang valid:\n1 = 7 Hari (Rp5,000)\n2 = 15 Hari (Rp10,000)\n3 = 1 Bulan (Rp20,000)`);
-          return;
-        }
-        
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + pkg.days);
-        
-        const existing = await db.query.userMemberships.findFirst({
-          where: eq(userMemberships.telegramUserId, userId)
-        });
-        
-        if (existing) {
-          await db.update(userMemberships).set({
-            status: "active",
-            expiresAt,
-            packageId
-          }).where(eq(userMemberships.telegramUserId, userId));
-        } else {
-          await db.insert(userMemberships).values({
-            telegramUserId: userId,
-            packageId,
-            status: "active",
-            expiresAt
-          });
-        }
-        
-        await db.update(paymentRecords).set({
-          status: "verified",
-          verifiedBy: chatId,
-          verifiedAt: new Date()
-        }).where(and(
-          eq(paymentRecords.telegramUserId, userId),
-          eq(paymentRecords.packageId, packageId),
-          eq(paymentRecords.status, "pending")
-        ));
-        
-        await bot.sendMessage(chatId, `✅ User ${userId} sudah diverifikasi!\n\n📦 Paket: ${pkg.name}\n💰 Harga: Rp${pkg.price.toLocaleString("id-ID")}\n⏱️ Premium sampai: ${expiresAt.toLocaleDateString("id-ID")}`);
-        
-        try {
-          await bot.sendMessage(userId, `✅ Pembayaran Anda sudah diverifikasi!\n\n🎉 Anda sekarang Premium!\n\n📦 Paket: ${pkg.name}\n⏱️ Durasi: ${pkg.days} hari\n📅 Berakhir: ${expiresAt.toLocaleDateString("id-ID")}\n\nSekarang Anda bisa akses CV Kontak Admin. Ketik /admin untuk mulai!`);
-        } catch (e) {
-          console.log("User not found for notification");
-        }
-      } catch (err) {
-        console.error("Error verifying payment:", err);
-        await bot.sendMessage(chatId, `❌ Gagal memverifikasi pembayaran\n\nError: ${err instanceof Error ? err.message : "Unknown error"}`);
-      }
-      return;
-    }
-
-    // Admin clear conversions command
+    // Admin clear conversions command (hanya untuk admin)
     if (text === "/clear_all") {
       const userIdStr = chatId.toString();
       
@@ -263,7 +124,7 @@ Pilih fitur di bawah:`;
       try {
         await db.delete(conversions);
         userStates.clear();
-        await bot.sendMessage(chatId, `✅ Hasil konversi berhasil dihapus!\n\n🗑️ Data yang dihapus:\n- Conversions (hasil konversi): Dihapus ✅\n- User States: Dihapus ✅\n\n✅ Data yang tetap aman:\n- Payment Records (bukti pembayaran): Tersimpan ✅\n- User Memberships (data Premium): Tersimpan ✅\n\nBot siap untuk test baru!`);
+        await bot.sendMessage(chatId, `✅ Semua hasil konversi berhasil dihapus!\n\n🗑️ Data yang dihapus:\n- Conversions (hasil konversi): Dihapus ✅\n- User States: Dihapus ✅\n\nBot siap untuk test baru!`);
         console.log("✅ Admin cleared conversions data from database");
       } catch (err) {
         console.error("Error clearing conversions:", err);
@@ -272,83 +133,11 @@ Pilih fitur di bawah:`;
       return;
     }
 
-    // Admin mode
+    // Admin CV mode - sekarang gratis untuk semua!
     if (text === "/admin") {
-      if (!isPremiumUser(chatId)) {
-        await bot.sendMessage(chatId, "🔒 Fitur ini hanya untuk member premium.\n\nHubungi admin untuk akses premium.");
-        return;
-      }
-      
       state.mode = "ADMIN_CV";
       state.step = 1;
       await bot.sendMessage(chatId, "Berikan nomor admin (ketik satu nomor per baris):");
-      return;
-    }
-
-    // Handle payment proof (photo/document)
-    if (msg.photo || (msg.document && state.mode === "VIP_PURCHASE")) {
-      try {
-        const pendingPayment = await db.query.paymentRecords.findFirst({
-          where: and(
-            eq(paymentRecords.telegramUserId, chatId),
-            eq(paymentRecords.status, "pending")
-          )
-        });
-
-        if (!pendingPayment) {
-          await bot.sendMessage(chatId, "⚠️ Anda belum memilih paket Premium.\n\nKetik /vip untuk memilih paket terlebih dahulu.");
-          return;
-        }
-
-        const pkg = await db.query.membershipPackages.findFirst({
-          where: eq(membershipPackages.id, pendingPayment.packageId)
-        });
-
-        if (!pkg) {
-          await bot.sendMessage(chatId, "❌ Paket tidak ditemukan");
-          return;
-        }
-
-        const adminMessage = `🔔 BUKTI PEMBAYARAN BARU!
-
-👤 User ID: <code>${chatId}</code>
-📦 Paket: ${pkg.name}
-💰 Jumlah: Rp${pkg.price.toLocaleString("id-ID")}
-📅 Waktu: ${new Date().toLocaleString("id-ID")}
-
-✅ Untuk verifikasi, gunakan:
-<code>/verify ${chatId} ${pkg.id}</code>`;
-
-        if (ADMIN_ID) {
-          try {
-            if (msg.photo) {
-              const photoId = msg.photo[msg.photo.length - 1].file_id;
-              await bot.sendPhoto(parseInt(ADMIN_ID), photoId, {
-                caption: adminMessage,
-                parse_mode: "HTML"
-              });
-            } else if (msg.document) {
-              const docId = msg.document.file_id;
-              await bot.sendDocument(parseInt(ADMIN_ID), docId, {
-                caption: adminMessage,
-                parse_mode: "HTML"
-              });
-            }
-          } catch (e) {
-            console.log("Failed to send to admin:", e);
-          }
-        }
-
-        await bot.sendMessage(chatId, `✅ Bukti pembayaran diterima!
-
-Terima kasih sudah mengirim bukti transfer. Admin akan memverifikasi dalam waktu kurang dari 1 jam.
-
-Anda akan mendapat notifikasi setelah pembayaran diverifikasi.`);
-        return;
-      } catch (error) {
-        console.error("Error processing payment proof:", error);
-        await bot.sendMessage(chatId, "❌ Terjadi kesalahan saat memproses bukti pembayaran.");
-      }
       return;
     }
 
@@ -417,87 +206,9 @@ Anda akan mendapat notifikasi setelah pembayaran diverifikasi.`);
       return;
     } else if (query.data === "btn_admin") {
       await bot.answerCallbackQuery(query.id);
-      if (!isPremiumUser(chatId)) {
-        await bot.sendMessage(chatId, "🔒 Fitur CV Kontak Admin hanya untuk member premium.\n\nHubungi admin untuk akses premium.");
-        return;
-      }
-      
       state.mode = "ADMIN_CV";
       state.step = 1;
       await bot.sendMessage(chatId, "Berikan nomor admin (ketik satu nomor per baris):");
-      return;
-    } else if (query.data?.startsWith("vip_")) {
-      await bot.answerCallbackQuery(query.id);
-      const packageId = parseInt(query.data.split("_")[1]);
-      
-      try {
-        const pkg = await db.query.membershipPackages.findFirst({
-          where: eq(membershipPackages.id, packageId)
-        });
-        
-        if (!pkg) {
-          await bot.sendMessage(chatId, "❌ Paket tidak ditemukan");
-          return;
-        }
-        
-        const message = `💳 PAKET: ${pkg.name}
-💰 HARGA: Rp${pkg.price.toLocaleString("id-ID")}
-⏱️ DURASI: ${pkg.days} hari akses Premium
-
-📌 CARA PEMBAYARAN:
-
-1️⃣ Transfer ke:
-BANK SEA BANK
-NO REK: 901903426172
-ATAS NAMA: NURYUTEH
-
-2️⃣ Kirim bukti transfer ke bot ini
-💡 Kirim foto atau dokumen bukti transfer
-
-3️⃣ Admin akan verifikasi dalam <1 jam
-
-Setelah verifikasi, Anda langsung bisa akses CV Kontak Admin!`;
-        
-        await bot.sendMessage(chatId, message);
-        state.mode = "VIP_PURCHASE";
-        state.selectedPackageId = packageId;
-        
-        await db.insert(paymentRecords).values({
-          telegramUserId: chatId,
-          packageId,
-          amount: pkg.price,
-          status: "pending"
-        });
-      } catch (err) {
-        console.error("Error processing Premium purchase:", err);
-        await bot.sendMessage(chatId, "❌ Terjadi kesalahan");
-      }
-      return;
-    } else if (query.data === "btn_vip") {
-      await bot.answerCallbackQuery(query.id);
-      
-      if (isPremiumUser(chatId)) {
-        await bot.sendMessage(chatId, "✅ Anda sudah Premium! Akses CV Kontak Admin sekarang dengan ketik /admin");
-        return;
-      }
-      
-      try {
-        const packages = await db.select().from(membershipPackages);
-        const buttons = packages.map((pkg) => [
-          { text: `${pkg.name} - Rp${pkg.price.toLocaleString("id-ID")}`, callback_data: `vip_${pkg.id}` }
-        ]);
-        
-        const vipMessage = `💎 PAKET PREMIUM MEMBERSHIP
-
-Pilih paket yang sesuai kebutuhan Anda:`;
-        
-        await bot.sendMessage(chatId, vipMessage, {
-          reply_markup: { inline_keyboard: buttons }
-        });
-      } catch (err) {
-        console.error("Error loading packages:", err);
-        await bot.sendMessage(chatId, "❌ Gagal memuat paket");
-      }
       return;
     } else if (query.data === "btn_reset") {
       await bot.answerCallbackQuery(query.id);

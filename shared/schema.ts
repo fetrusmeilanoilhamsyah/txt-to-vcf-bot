@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -31,46 +31,6 @@ export const insertConversionSchema = createInsertSchema(conversions).omit({
 });
 export type Conversion = typeof conversions.$inferSelect;
 export type InsertConversion = z.infer<typeof insertConversionSchema>;
-
-// Membership packages table
-export const membershipPackages = pgTable("membership_packages", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(), // "7 Hari", "15 Hari", "1 Bulan"
-  days: integer("days").notNull(), // 7, 15, 30
-  price: integer("price").notNull(), // 5000, 10000, 20000 (in rupiah)
-});
-
-export const insertMembershipPackageSchema = createInsertSchema(membershipPackages).omit({ id: true });
-export type MembershipPackage = typeof membershipPackages.$inferSelect;
-
-// User membership table
-export const userMemberships = pgTable("user_memberships", {
-  id: serial("id").primaryKey(),
-  telegramUserId: bigint("telegram_user_id", { mode: "number" }).notNull().unique(),
-  packageId: integer("package_id").notNull(),
-  status: text("status").notNull().default("pending"), // "pending", "active", "expired"
-  expiresAt: timestamp("expires_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const insertUserMembershipSchema = createInsertSchema(userMemberships).omit({ id: true, createdAt: true });
-export type UserMembership = typeof userMemberships.$inferSelect;
-
-// Payment records table
-export const paymentRecords = pgTable("payment_records", {
-  id: serial("id").primaryKey(),
-  telegramUserId: bigint("telegram_user_id", { mode: "number" }).notNull(),
-  packageId: integer("package_id").notNull(),
-  amount: integer("amount").notNull(),
-  status: text("status").notNull().default("pending"), // "pending", "verified", "rejected"
-  proofUrl: text("proof_url"), // Link ke bukti transfer
-  verifiedBy: bigint("verified_by", { mode: "number" }), // Admin user ID yang verify
-  createdAt: timestamp("created_at").defaultNow(),
-  verifiedAt: timestamp("verified_at"),
-});
-
-export const insertPaymentRecordSchema = createInsertSchema(paymentRecords).omit({ id: true, createdAt: true, verifiedAt: true });
-export type PaymentRecord = typeof paymentRecords.$inferSelect;
 
 // Conversion configuration types
 export const conversionConfigSchema = z.object({
