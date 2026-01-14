@@ -15,6 +15,19 @@ Bot Telegram otomatis untuk konversi file `.txt` ke `.vcf` dengan sistem manajem
 | **✨ Fitur Utama** | • Konversi TXT ke VCF (Kontak HP)<br>• Sistem User Premium & Admin Panel<br>• Auto-sync Database Neon PostgreSQL |
 | **👤 Developer** | **FETRUS MEILANO ILHAMSYAH** |
 
+
+/start       - Menu utama
+/txt2vcf     - Konversi TXT ke VCF
+/admincv     - Buat kontak Admin + Navy
+/vcf2txt     - Ekstrak nomor dari VCF
+/merge       - Gabungkan file VCF
+/reset       - Hapus data pribadi
+/help        - Bantuan penggunaan
+/about       - Info pembuat bot
+
+# Admin only
+/admin_stats - Lihat statistik bot
+/admin_clear - Hapus semua data
 ---
 
 ## ⚠️ Catatan Keamanan
