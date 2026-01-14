@@ -1,5 +1,95 @@
-node_modules
-dist
+# ==================== DEPENDENCIES ====================
+node_modules/
+.npm
+.pnpm
+.yarn/
+yarn.lock
+package-lock.json
+pnpm-lock.yaml
+
+# ==================== BUILD OUTPUTS ====================
+dist/
+build/
+out/
+*.exe
+*.out
+*.app
+
+# ==================== ENVIRONMENT ====================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# ==================== DATABASE ====================
+*.db
+*.sqlite
+*.sqlite3
+data/
+*.db-journal
+
+# ==================== LOGS ====================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+logs/
+
+# ==================== OS & EDITOR ====================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.swp
+*.swo
+*~
+~$*
+
+# ==================== IDE ====================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ==================== SERVER/EXPRESS ====================
+server/public/uploads/
+server/public/temp/
+
+# ==================== TYPESCRIPT ====================
+*.tsbuildinfo
+
+# ==================== VITE ====================
+vite.config.ts.timestamp-*
+vite.config.ts.*
+
+# ==================== ARCHIVES ====================
+*.tar.gz
+*.zip
+*.7z
+*.rar
+
+# ==================== TELEGRAM BOT SPECIFIC ====================
+# File VCF/TXT yang diupload user
+uploads/
+temp/
+*.vcf
+*.txt
+*.vcf.bak
+*.txt.bak
+
+# Session files (jika pakai telethon/pyrogram)
+*.session
+*.session-journal
+
+# ==================== CUSTOM ====================
+# File yang sudah Anda sebutkan
 .DS_Store
 server/public
 vite.config.ts.*
